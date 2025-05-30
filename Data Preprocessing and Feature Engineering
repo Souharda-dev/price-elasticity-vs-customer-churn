@@ -1,0 +1,42 @@
+# Data Cleaning
+# Handle missing values if any (our synthetic data doesn't have missing values)
+df.fillna(method='ffill', inplace=True)
+
+# Feature Engineering
+# Create a feature for price sensitivity (monthly charge * price change)
+df['price_sensitivity'] = df['monthly_charge'] * df['price_change_pct']
+
+# Create tenure groups
+df['tenure_group'] = pd.cut(df['tenure'], 
+                            bins=[0, 12, 24, 36, 48, 60, 72], 
+                            labels=['0-1', '1-2', '2-3', '3-4', '4-5', '5-6'])
+
+# Create usage segments
+df['usage_segment'] = pd.qcut(df['usage_kwh'], q=4, labels=['Low', 'Medium', 'High', 'Very High'])
+
+# Prepare features and target
+X = df.drop(['customer_id', 'churn'], axis=1)
+y = df['churn']
+
+# Identify categorical and numerical columns
+categorical_cols = ['contract_type', 'payment_method', 'paperless_billing', 'tenure_group', 'usage_segment']
+numerical_cols = ['tenure', 'monthly_charge', 'price_change_pct', 'usage_kwh', 
+                  'customer_service_calls', 'price_sensitivity']
+
+# Create transformers for preprocessing
+numerical_transformer = StandardScaler()
+categorical_transformer = OneHotEncoder(handle_unknown='ignore')
+
+# Create column transformer
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numerical_transformer, numerical_cols),
+        ('cat', categorical_transformer, categorical_cols)
+    ])
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+print("\nClass distribution before SMOTE:")
+print("Training set:", y_train.value_counts(normalize=True))
+print("Test set:", y_test.value_counts(normalize=True))
