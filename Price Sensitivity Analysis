@@ -1,0 +1,132 @@
+# Analyze how price changes affect churn probability
+
+# Create a function to predict churn probability with varying price changes
+def analyze_price_sensitivity(model, customer_data, price_change_range=(-0.2, 0.2), steps=20):
+    """
+    Analyzes how price changes affect churn probability for a given customer.
+    
+    Args:
+        model: Trained model
+        customer_data: DataFrame with a single customer's data
+        price_change_range: Tuple of (min, max) price change percentage
+        steps: Number of steps in the range
+        
+    Returns:
+        DataFrame with price changes and corresponding churn probabilities
+    """
+    # Create a range of price changes
+    price_changes = np.linspace(price_change_range[0], price_change_range[1], steps)
+    
+    # Prepare results
+    results = []
+    
+    for change in price_changes:
+        # Create a copy of the customer data
+        temp_data = customer_data.copy()
+        
+        # Apply the price change
+        temp_data['price_change_pct'] = change
+        temp_data['price_sensitivity'] = temp_data['monthly_charge'] * change
+        
+        # Predict churn probability
+        proba = model.predict_proba(temp_data)[0, 1]
+        
+        results.append({
+            'price_change_pct': change,
+            'churn_probability': proba,
+            'monthly_charge': temp_data['monthly_charge'].values[0],
+            'new_monthly_charge': temp_data['monthly_charge'].values[0] * (1 + change)
+        })
+    
+    return pd.DataFrame(results)
+
+# Select a sample customer for analysis
+sample_customer = X_train.sample(1, random_state=42)
+
+# Analyze price sensitivity for this customer
+price_analysis_df = analyze_price_sensitivity(best_model, sample_customer)
+
+# Plot the results
+plt.figure(figsize=(12, 6))
+plt.plot(price_analysis_df['price_change_pct'], price_analysis_df['churn_probability'], marker='o')
+plt.axvline(x=0, color='r', linestyle='--', label='Current Price')
+plt.title('Price Change Impact on Churn Probability')
+plt.xlabel('Price Change Percentage')
+plt.ylabel('Churn Probability')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Analyze for different customer segments
+def analyze_segment_price_sensitivity(model, data, segment_col, segment_value):
+    """
+    Analyzes price sensitivity for a specific customer segment.
+    """
+    segment_data = data[data[segment_col] == segment_value].sample(5, random_state=42)
+    
+    plt.figure(figsize=(12, 6))
+    for i, (_, customer) in enumerate(segment_data.iterrows()):
+        customer_df = pd.DataFrame([customer])
+        analysis = analyze_price_sensitivity(model, customer_df)
+        plt.plot(analysis['price_change_pct'], analysis['churn_probability'], 
+                 label=f'Customer {i+1}')
+    
+    plt.title(f'Price Sensitivity for {segment_col}={segment_value}')
+    plt.xlabel('Price Change Percentage')
+    plt.ylabel('Churn Probability')
+    plt.axvline(x=0, color='r', linestyle='--', label='Current Price')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+# Example: Analyze for different contract types
+for contract_type in df['contract_type'].unique():
+    analyze_segment_price_sensitivity(best_model, X, 'contract_type', contract_type)
+
+# Generate recommendations based on the analysis
+def generate_price_recommendations(model, data, segment_col):
+    """
+    Generates price change recommendations for different customer segments.
+    """
+    recommendations = []
+    
+    for segment in data[segment_col].unique():
+        segment_data = data[data[segment_col] == segment]
+        
+        # Get average churn probability at current prices
+        current_proba = model.predict_proba(segment_data)[:, 1].mean()
+        
+        # Test small price decrease
+        temp_data = segment_data.copy()
+        temp_data['price_change_pct'] = -0.05
+        temp_data['price_sensitivity'] = temp_data['monthly_charge'] * -0.05
+        decrease_proba = model.predict_proba(temp_data)[:, 1].mean()
+        
+        # Test small price increase
+        temp_data = segment_data.copy()
+        temp_data['price_change_pct'] = 0.05
+        temp_data['price_sensitivity'] = temp_data['monthly_charge'] * 0.05
+        increase_proba = model.predict_proba(temp_data)[:, 1].mean()
+        
+        # Determine recommendation
+        if decrease_proba < current_proba - 0.05 and increase_proba > current_proba + 0.05:
+            rec = "Consider small price decrease (5%) as it significantly reduces churn risk"
+        elif increase_proba < current_proba + 0.02:
+            rec = "Consider small price increase (5%) as churn risk remains stable"
+        else:
+            rec = "Maintain current pricing as changes significantly impact churn"
+        
+        recommendations.append({
+            'segment': segment,
+            'current_churn_probability': current_proba,
+            'decrease_5pct_churn_prob': decrease_proba,
+            'increase_5pct_churn_prob': increase_proba,
+            'recommendation': rec
+        })
+    
+    return pd.DataFrame(recommendations)
+
+# Generate recommendations by contract type
+contract_recommendations = generate_price_recommendations(best_model, X, 'contract_type')
+print("\nPrice Change Recommendations by Contract Type:")
+print(contract_recommendations)
