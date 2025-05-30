@@ -1,0 +1,26 @@
+# Apply SMOTE only on the training data to avoid data leakage
+smote = SMOTE(random_state=42)
+
+# First, we need to preprocess the data before applying SMOTE
+# Create a pipeline that first preprocesses then applies SMOTE
+from imblearn.pipeline import Pipeline as ImbPipeline
+
+# Create a temporary pipeline to transform the data
+temp_pipe = Pipeline(steps=[('preprocessor', preprocessor)])
+
+# Fit and transform the training data
+X_train_preprocessed = temp_pipe.fit_transform(X_train)
+
+# Apply SMOTE to the preprocessed data
+X_train_smote, y_train_smote = smote.fit_resample(X_train_preprocessed, y_train)
+
+print("\nClass distribution after SMOTE:")
+print(pd.Series(y_train_smote).value_counts(normalize=True))
+
+# Visualize the balanced classes
+plt.figure(figsize=(8, 6))
+sns.countplot(x=y_train_smote)
+plt.title('Customer Churn Distribution After SMOTE')
+plt.xlabel('Churn Status (0=No, 1=Yes)')
+plt.ylabel('Count')
+plt.show()
